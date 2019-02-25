@@ -1,6 +1,6 @@
 <?php
 
-namespace Icinga\Module\SaltStack\ProvidedHook\Director;
+namespace Icinga\Module\Saltstack\ProvidedHook\Director;
 
 use Icinga\Module\Director\Hook\ImportSourceHook;
 use Icinga\Module\Director\Exception\JsonException;
@@ -40,22 +40,22 @@ class ImportSource extends ImportSourceHook
 
     public static function addSettingsFormFields(QuickForm $form)
     {
-      $form->addElement('select', 'master_host', array(
+      $form->addElement('text', 'master_host', array(
         'label' => 'Salt Master Host',
         'required' => true
       ));
 
-      $form->addElement('select', 'api_username', array(
+      $form->addElement('text', 'api_username', array(
         'label' => 'Salt API Username',
         'required' => true
       ));
 
-      $form->addElement('select', 'api_password', array(
+      $form->addElement('text', 'api_password', array(
         'label' => 'Salt API Password',
         'required' => true
       ));
 
-      $form->addElement('select', 'default_host_templates', array(
+      $form->addElement('text', 'default_host_templates', array(
         'label' => 'Default Host Templates',
         'description' => 'The comma delimited list of default host templates, if none are defined by salt',
         'required' => false
