@@ -2,33 +2,49 @@
 
 namespace Icinga\Module\Saltstack\ProvidedHook\Director;
 
-use Icinga\Module\Director\Hook\ImportSourceHook;
+use Icinga\Application\Config;
+use Icinga\Exception\ConfigurationError;
+use Icinga\Exception\IcingaException;
 use Icinga\Module\Director\Exception\JsonException;
+use Icinga\Module\Director\Hook\ImportSourceHook;
 use Icinga\Module\Director\Web\Form\QuickForm;
 use RuntimeException;
+
+ini_set("log_errors", 1);
+ini_set("error_log", "/tmp/php-error.log");
 
 
 class ImportSource extends ImportSourceHook
 {
     protected $db;
 
-
     public function getName()
     {
         return 'Import from SaltStack (saltstack)';
     }
 
+    /**
+     * @return object[]
+     * @throws ConfigurationError
+     * @throws IcingaException
+     */
     public function fetchData()
     {
-      $result = array();
+      // $result = array();
 
-      // if ($this-getSetting('query_type') == 'host') {
-      $result = array_merge($result, $this->fetchHostData());
-      // }
+      // // if ($this->getSetting('query_type') == 'host') {
+      // $result = array_merge($result, $this->getHosts());
+      // // }
 
-      return $result;
+      // return $result;
+      return $this->getHosts();
     }
 
+    /**
+     * @return array
+     * @throws ConfigurationError
+     * @throws IcingaException
+     */
     public function listColumns()
     {
       return array(
@@ -38,6 +54,11 @@ class ImportSource extends ImportSourceHook
       );
     }
 
+    /**
+     * @param QuickForm $form
+     * @return \Icinga\Module\Director\Forms\ImportSourceForm|QuickForm
+     * @throws \Zend_Form_Exception
+     */
     public static function addSettingsFormFields(QuickForm $form)
     {
       $form->addElement('text', 'master_host', array(
@@ -62,62 +83,84 @@ class ImportSource extends ImportSourceHook
       ));
     }
 
-    protected function getUrl($url = '/')
-    {
-      return 'https://' . $this->getSetting('master_host') . ':8080' . $url;
+    protected function getMasterHost() {
+      return (string) $this->getSetting('master_host');
+
     }
 
-    protected function getApi($action = 'test.ping', $target = '*', $args = array(), $kwds = array())
+    protected function getUrl($url = '/')
+    {
+      return 'https://' . $this->getMasterHost() . ':8080' . $url;
+    }
+
+    protected function getApi($action, $target = '*', $args = null, $kwds = null)
     {
       $auth = array(
-        'username' => $this.getSettings('api_username'),
-        'password' => $this.getSettings('api_password'),
-        'eauth' => $this.getSettings('eauth', 'pam')
+        'username' => $this->getSetting('api_username'),
+        'password' => $this->getSetting('api_password'),
+        'eauth' => $this->getSetting('eauth', 'pam')
       );
 
-      $token = json_decode(
-        $this.request('post', '/login', $auth)
-      )['return'][0]['token'];
+      $token = $this->request('post', '/login', null, $auth)['return'][0]['token'];
+
+      error_log("Token: " . $token);
 
       $params = array(
         'client' => 'local',
         'tgt' => $target,
         'fun' => $action,
-        'arg' => $args,
-        'kwarg' => $kwds
+        'arg' => (array) $args,
+        'kwarg' => (array) $kwds
       );
 
-      return json_decode($this.request('post', '/', $params));
+      return $this->request('post', '/', array('X-Auth-Token: ' . $token), $params);
 
     }
 
     protected function getHosts()
     {
-      $res = $this.getApi();
+      $res = $this->getApi('test.ping');
+
+      error_log("Response : " . var_export($res, true));
 
       $hosts = array();
-      foreach ($hosts as $host => $connected) {
-        $grains = $this.getApi(
+      foreach ($res['return'][0] as $host => $connected) {
+        error_log('Found host : ' . $host . '(' . var_export($connected, true) . ')');
+
+        $grains = $this->getApi(
           'grains.item', $host, array('host_ip4', 'icinga:host_templates')
         )['return'][0][$host];
 
-        array_push($hosts, array(
+        error_log("Host: " . $host . " Grains: " . var_export($grains, true));
+
+        $host_templates = $grains['icinga:host_templates'];
+        if ( empty($host_templates) ) {
+          $host_templates = explode(',', $this->getSetting('default_host_templates', 'External Hosts'));
+        }
+
+        $row = array(
           'hostname' => $host,
           'ip_address' => $grains['host_ip4'],
-          'host_templates' => $grains['icinga:host_templates'] || explode(',', $this.getSettings('default_host_templates', array('External Hosts')))
-        ));
+          'host_templates' => (array) $host_templates
+        );
+
+        error_log("Row: " . var_export($row, true));
+
+        array_push($hosts, (object) $row);
       }
 
-      return $hosts;
+      error_log('Hosts: ' . var_export($hosts, true));
+
+      return (array) $hosts;
     }
 
-    protected function request($method, $url = '/', $headers = array(), $body = null)
+    protected function request($method, $url = '/', $headers = null, $body = null)
     {
-        $headers = merge_array($headers, array(
-            'Host: ' . $host . ':8080',
+        $headers = array_merge(array(
+            'Host: ' . $this->getMasterHost() . ':8080',
             'Connection: close',
             'Content-Type: application/json'
-        ));
+        ), (array) $headers);
 
         if ($body !== null) {
             $body = json_encode($body);
@@ -142,14 +185,20 @@ class ImportSource extends ImportSourceHook
         $context = stream_context_create($opts);
         $res = file_get_contents($this->getUrl($url), false, $context);
 
-        if (substr(array_shift($http_response_header), 0, 10) !== 'HTTP/1.1 2') {
+        $response_header = array_shift($http_response_header);
+
+        if (substr($response_header, 0, 10) !== 'HTTP/1.1 2') {
             throw new RuntimeException(
-                'Headers: %s, Response: %s',
+              sprintf(
+                'Headers: %s, Response: %s, Code: %s, Request Headers: %s',
                 implode("\n", $http_response_header),
-                var_export($res, 1)
+                var_export($res, 1),
+                substr($response_header, 9, 12),
+                implode(', ', $headers)
+              )
             );
         }
 
-        return $res;
+        return json_decode($res, true);
     }
 }
