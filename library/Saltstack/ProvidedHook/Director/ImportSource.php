@@ -71,7 +71,7 @@ class ImportSource extends ImportSourceHook
         'required' => true
       ));
 
-      $form->addElement('text', 'api_password', array(
+      $form->addElement('password', 'api_password', array(
         'label' => 'Salt API Password',
         'required' => true
       ));
