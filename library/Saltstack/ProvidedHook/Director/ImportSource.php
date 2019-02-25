@@ -93,7 +93,7 @@ class ImportSource extends ImportSourceHook
       return 'https://' . $this->getMasterHost() . ':8080' . $url;
     }
 
-    protected function getApi($action, $target = '*', $args = null, $kwds = null)
+    protected function querySalt($action, $target = '*', $args = null, $kwds = null)
     {
       $auth = array(
         'username' => $this->getSetting('api_username'),
@@ -119,7 +119,7 @@ class ImportSource extends ImportSourceHook
 
     protected function getHosts()
     {
-      $res = $this->getApi('test.ping');
+      $res = $this->querySalt('test.ping');
 
       error_log("Response : " . var_export($res, true));
 
@@ -127,7 +127,11 @@ class ImportSource extends ImportSourceHook
       foreach ($res['return'][0] as $host => $connected) {
         error_log('Found host : ' . $host . '(' . var_export($connected, true) . ')');
 
-        $grains = $this->getApi(
+        if (!$connected) {
+          continue;
+        }
+
+        $grains = $this->querySalt(
           'grains.item', $host, array('host_ip4', 'icinga:host_template')
         )['return'][0][$host];
 
