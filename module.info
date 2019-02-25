@@ -1,0 +1,5 @@
+Name: SaltStack
+Version: 0.0.1
+Depends: director
+Description: SaltStack importer for Icinga Director
+ The saltstack module provides an Import Source for the saltstack API.
