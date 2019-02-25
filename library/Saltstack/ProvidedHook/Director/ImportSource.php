@@ -50,7 +50,7 @@ class ImportSource extends ImportSourceHook
       return array(
         'hostname',
         'ip_address',
-        'host_templates'
+        'host_template'
       );
     }
 
@@ -76,9 +76,9 @@ class ImportSource extends ImportSourceHook
         'required' => true
       ));
 
-      $form->addElement('text', 'default_host_templates', array(
-        'label' => 'Default Host Templates',
-        'description' => 'The comma delimited list of default host templates, if none are defined by salt',
+      $form->addElement('text', 'default_host_template', array(
+        'label' => 'Default Host Template',
+        'description' => 'The name of the Host Template to use for this minion',
         'required' => false
       ));
     }
@@ -128,20 +128,20 @@ class ImportSource extends ImportSourceHook
         error_log('Found host : ' . $host . '(' . var_export($connected, true) . ')');
 
         $grains = $this->getApi(
-          'grains.item', $host, array('host_ip4', 'icinga:host_templates')
+          'grains.item', $host, array('host_ip4', 'icinga:host_template')
         )['return'][0][$host];
 
         error_log("Host: " . $host . " Grains: " . var_export($grains, true));
 
-        $host_templates = $grains['icinga:host_templates'];
-        if ( empty($host_templates) ) {
-          $host_templates = explode(',', $this->getSetting('default_host_templates', 'External Hosts'));
+        $host_template = $grains['icinga:host_template'];
+        if ( empty($grains['icinga:host_template']) ) {
+          $host_template = $this->getSetting('default_host_template', 'External Hosts');
         }
 
         $row = array(
           'hostname' => $host,
           'ip_address' => $grains['host_ip4'],
-          'host_templates' => (array) $host_templates
+          'host_template' => $host_template
         );
 
         error_log("Row: " . var_export($row, true));
